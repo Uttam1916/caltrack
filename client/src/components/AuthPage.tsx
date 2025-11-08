@@ -2,7 +2,8 @@ import { useState } from 'react';
 import '../styles/auth.css';
 
 interface AuthPageProps {
-  onLogin: () => void;
+  // on successful login provide user and token
+  onLogin: (user: any, token: string) => void;
 }
 
 export function AuthPage({ onLogin }: AuthPageProps) {
@@ -16,9 +17,26 @@ export function AuthPage({ onLogin }: AuthPageProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Mock authentication - in production, call your backend API
-    console.log('Auth attempt:', { isLogin, formData });
-    onLogin();
+    // Call backend auth endpoint
+    (async () => {
+      try {
+        const username = formData.email; // the UI uses email field; we map to username for hardcoded users
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password: formData.password })
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          console.error('Login failed', err);
+          return;
+        }
+        const data = await res.json();
+        onLogin(data.user, data.token);
+      } catch (err) {
+        console.error('Login error', err);
+      }
+    })();
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -1,4 +1,5 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import React from 'react';
 
 interface CalorieChartProps {
   data: Array<{ date: string; calories: number }>;

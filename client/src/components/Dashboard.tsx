@@ -13,19 +13,8 @@ const MOCK_USER_GOALS = {
   fats: 67
 };
 
-const MOCK_TODAY_CONSUMED = {
-  calories: 1450,
-  protein: 98,
-  carbs: 165,
-  fats: 42
-};
-
-const MOCK_FOOD_ENTRIES = [
-  { id: 1, name: 'Oatmeal with Berries', calories: 350, protein: 12, carbs: 58, fats: 8, time: '08:30 AM' },
-  { id: 2, name: 'Grilled Chicken Salad', calories: 420, protein: 45, carbs: 28, fats: 15, time: '12:45 PM' },
-  { id: 3, name: 'Protein Shake', calories: 180, protein: 25, carbs: 12, fats: 3, time: '03:30 PM' },
-  { id: 4, name: 'Salmon with Rice', calories: 500, protein: 16, carbs: 67, fats: 16, time: '07:15 PM' }
-];
+// We'll fetch today's entries from the backend. Frontend uses the following shape:
+// { id, name, calories, protein, carbs, fats, date }
 
 const MOCK_HISTORY = [
   { date: 'Mon', calories: 1850 },
@@ -39,8 +28,9 @@ const MOCK_HISTORY = [
 
 export function Dashboard() {
   const [showAddFood, setShowAddFood] = useState(false);
-  const [foodEntries, setFoodEntries] = useState(MOCK_FOOD_ENTRIES);
-  const [consumed, setConsumed] = useState(MOCK_TODAY_CONSUMED);
+  const [foodEntries, setFoodEntries] = useState<Array<any>>([]);
+  const [consumed, setConsumed] = useState({ calories: 0, protein: 0, carbs: 0, fats: 0 });
+  const [loading, setLoading] = useState(true);
 
   const remaining = {
     calories: MOCK_USER_GOALS.calories - consumed.calories,
@@ -51,20 +41,110 @@ export function Dashboard() {
 
   const caloriePercent = (consumed.calories / MOCK_USER_GOALS.calories) * 100;
 
-  const handleAddFood = (food: any) => {
-    const newEntry = {
-      id: Date.now(),
-      ...food,
-      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-    };
-    setFoodEntries([...foodEntries, newEntry]);
-    setConsumed({
-      calories: consumed.calories + food.calories,
-      protein: consumed.protein + food.protein,
-      carbs: consumed.carbs + food.carbs,
-      fats: consumed.fats + food.fats
-    });
-    setShowAddFood(false);
+  // Load today's entries from backend
+  useEffect(() => {
+    async function fetchToday() {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        const res = await fetch('/api/entries/today', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
+        const data = await res.json();
+        // map _id -> id and derive time string
+        const mapped = data.map((e: any) => ({
+          id: e._id,
+          name: e.name,
+          calories: e.calories,
+          protein: e.protein,
+          carbs: e.carbs,
+          fats: e.fats,
+          date: e.date,
+          time: new Date(e.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+        }));
+        setFoodEntries(mapped);
+        // calculate consumed totals
+        const totals = mapped.reduce(
+          (acc: any, item: any) => {
+            acc.calories += Number(item.calories || 0);
+            acc.protein += Number(item.protein || 0);
+            acc.carbs += Number(item.carbs || 0);
+            acc.fats += Number(item.fats || 0);
+            return acc;
+          },
+          { calories: 0, protein: 0, carbs: 0, fats: 0 }
+        );
+        setConsumed(totals);
+      } catch (err) {
+        console.error('Error loading today entries', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchToday();
+  }, []);
+
+  // Add a new food entry: POST to backend and update state from returned entry
+  const handleAddFood = async (food: any) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch('/api/entries', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify(food)
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to create entry: ${res.status}`);
+      }
+      const created = await res.json();
+      const mapped = {
+        id: created._id,
+        name: created.name,
+        calories: created.calories,
+        protein: created.protein,
+        carbs: created.carbs,
+        fats: created.fats,
+        date: created.date,
+        time: new Date(created.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      };
+      setFoodEntries(prev => [...prev, mapped]);
+      setConsumed(prev => ({
+        calories: prev.calories + Number(mapped.calories || 0),
+        protein: prev.protein + Number(mapped.protein || 0),
+        carbs: prev.carbs + Number(mapped.carbs || 0),
+        fats: prev.fats + Number(mapped.fats || 0)
+      }));
+      setShowAddFood(false);
+    } catch (err) {
+      console.error('Failed to add food', err);
+      // you could show a toast here
+    }
+  };
+
+  const handleDeleteEntry = async (id: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/entries/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to delete entry: ${res.status}`);
+      }
+      setFoodEntries(prev => prev.filter(e => e.id !== id));
+      // recalc consumed totals
+      setConsumed(prev => {
+        const entry = foodEntries.find(e => e.id === id);
+        if (!entry) return prev;
+        return {
+          calories: prev.calories - Number(entry.calories || 0),
+          protein: prev.protein - Number(entry.protein || 0),
+          carbs: prev.carbs - Number(entry.carbs || 0),
+          fats: prev.fats - Number(entry.fats || 0)
+        };
+      });
+    } catch (err) {
+      console.error('Failed to delete entry', err);
+    }
   };
 
   return (
@@ -141,6 +221,9 @@ export function Dashboard() {
                 <span className="macro-detail">P: {entry.protein}g</span>
                 <span className="macro-detail">C: {entry.carbs}g</span>
                 <span className="macro-detail">F: {entry.fats}g</span>
+              </div>
+              <div className="food-actions">
+                <button className="delete-entry-btn" onClick={() => handleDeleteEntry(entry.id)}>Delete</button>
               </div>
             </div>
           ))}

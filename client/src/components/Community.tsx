@@ -1,92 +1,78 @@
-import { useState } from 'react';
-import { Heart, MessageCircle, Plus } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Heart, MessageCircle, Plus, Trash } from 'lucide-react';
 import { CreatePostModal } from './CreatePostModal';
 import '../styles/community.css';
 
-// Mock data
-const MOCK_POSTS = [
-  {
-    id: 1,
-    author: 'Sarah Johnson',
-    avatar: 'SJ',
-    time: '2 hours ago',
-    content: 'Just hit my protein goal for the 7th day in a row! Consistency is key 💪',
-    likes: 24,
-    comments: 5,
-    isLiked: false
-  },
-  {
-    id: 2,
-    author: 'Mike Chen',
-    avatar: 'MC',
-    time: '4 hours ago',
-    content: 'Anyone else find it hard to hit their fat macros? I always go over on protein instead 😅',
-    likes: 12,
-    comments: 8,
-    isLiked: true
-  },
-  {
-    id: 3,
-    author: 'Emma Williams',
-    avatar: 'EW',
-    time: '6 hours ago',
-    content: 'Meal prep Sunday complete! Ready for a successful week of hitting my calorie goals 🥗',
-    likes: 45,
-    comments: 12,
-    isLiked: false
-  },
-  {
-    id: 4,
-    author: 'David Kim',
-    avatar: 'DK',
-    time: '8 hours ago',
-    content: 'Pro tip: Greek yogurt is a game changer for hitting protein goals. 20g per serving!',
-    likes: 67,
-    comments: 15,
-    isLiked: true
-  },
-  {
-    id: 5,
-    author: 'Lisa Martinez',
-    avatar: 'LM',
-    time: '1 day ago',
-    content: 'Down 10 pounds this month while staying in my calorie range. This app has changed my life! 🎉',
-    likes: 89,
-    comments: 23,
-    isLiked: false
-  }
-];
+interface CommunityProps {
+  token: string | null;
+  currentUser: any | null;
+}
 
-export function Community() {
-  const [posts, setPosts] = useState(MOCK_POSTS);
+export function Community({ token, currentUser }: CommunityProps) {
+  const [posts, setPosts] = useState<any[]>([]);
   const [showCreatePost, setShowCreatePost] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const handleLike = (postId: number) => {
-    setPosts(posts.map(post => {
-      if (post.id === postId) {
-        return {
-          ...post,
-          isLiked: !post.isLiked,
-          likes: post.isLiked ? post.likes - 1 : post.likes + 1
-        };
+  useEffect(() => {
+    async function fetchPosts() {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/posts');
+        if (!res.ok) throw new Error(`Failed to load posts ${res.status}`);
+        const data = await res.json();
+        setPosts(data.map((p: any) => ({
+          id: p._id,
+          authorId: p.authorId,
+          authorName: p.authorName,
+          content: p.content,
+          likes: p.likes,
+          comments: p.comments,
+          createdAt: p.createdAt
+        })));
+      } catch (err) {
+        console.error('Error loading posts', err);
+      } finally {
+        setLoading(false);
       }
-      return post;
-    }));
+    }
+
+    fetchPosts();
+  }, []);
+
+  const handleCreatePost = async (content: string) => {
+    try {
+      const res = await fetch('/api/posts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ content })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to create post: ${res.status}`);
+      }
+      const created = await res.json();
+      setPosts(prev => [{ id: created._id, authorId: created.authorId, authorName: created.authorName, content: created.content, likes: created.likes, comments: created.comments, createdAt: created.createdAt }, ...prev]);
+      setShowCreatePost(false);
+    } catch (err) {
+      console.error('Failed to create post', err);
+    }
   };
 
-  const handleCreatePost = (content: string) => {
-    const newPost = {
-      id: Date.now(),
-      author: 'You',
-      avatar: 'YO',
-      time: 'Just now',
-      content,
-      likes: 0,
-      comments: 0,
-      isLiked: false
-    };
-    setPosts([newPost, ...posts]);
-    setShowCreatePost(false);
+  const handleDeletePost = async (postId: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/posts/${postId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to delete post: ${res.status}`);
+      }
+      setPosts(prev => prev.filter(p => p.id !== postId));
+    } catch (err) {
+      console.error('Delete failed', err);
+    }
   };
 
   return (
@@ -103,16 +89,22 @@ export function Community() {
       </div>
 
       <div className="posts-container">
-        {posts.map(post => (
+        {loading && <p>Loading posts...</p>}
+        {!loading && posts.map(post => (
           <div key={post.id} className="post-card">
             <div className="post-header">
               <div className="post-author">
-                <div className="avatar">{post.avatar}</div>
+                <div className="avatar">{post.authorName ? post.authorName.split(' ').map((s:string)=>s[0]).join('').slice(0,2) : '??'}</div>
                 <div>
-                  <h4>{post.author}</h4>
-                  <span className="post-time">{post.time}</span>
+                  <h4>{post.authorName}</h4>
+                  <span className="post-time">{new Date(post.createdAt).toLocaleString()}</span>
                 </div>
               </div>
+              {currentUser && post.authorId === currentUser.id && (
+                <button className="delete-post-btn" onClick={() => handleDeletePost(post.id)} title="Delete post">
+                  <Trash size={16} />
+                </button>
+              )}
             </div>
 
             <div className="post-content">
@@ -120,11 +112,8 @@ export function Community() {
             </div>
 
             <div className="post-actions">
-              <button 
-                className={`action-btn ${post.isLiked ? 'liked' : ''}`}
-                onClick={() => handleLike(post.id)}
-              >
-                <Heart size={20} fill={post.isLiked ? '#e74c3c' : 'none'} />
+              <button className={`action-btn`}>
+                <Heart size={20} />
                 <span>{post.likes}</span>
               </button>
               <button className="action-btn">
