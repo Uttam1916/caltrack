@@ -6,8 +6,8 @@ const morgan = require('morgan');
 
 const connectDB = require('./config/db');
 const entriesRouter = require('./routes/entries');
-const authRouter = require('./routes/auth');
 const postsRouter = require('./routes/posts');
+const usersRouter = require('./routes/users');
 
 const app = express();
 
@@ -24,8 +24,8 @@ connectDB().catch(err => {
 
 // routes
 app.use('/api/entries', entriesRouter);
-app.use('/api/auth', authRouter);
 app.use('/api/posts', postsRouter);
+app.use('/api/users', usersRouter);
 
 // basic health check
 app.get('/api/health', (req, res) => res.json({ ok: true }));

@@ -2,8 +2,8 @@ import { useState } from 'react';
 import '../styles/auth.css';
 
 interface AuthPageProps {
-  // on successful login provide user and token
-  onLogin: (user: any, token: string) => void;
+  // on successful login provide user (no server-side auth)
+  onLogin: (user: any) => void;
 }
 
 export function AuthPage({ onLogin }: AuthPageProps) {
@@ -11,32 +11,51 @@ export function AuthPage({ onLogin }: AuthPageProps) {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    name: '',
+    username: '',
     confirmPassword: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Call backend auth endpoint
-    (async () => {
-      try {
-        const username = formData.email; // the UI uses email field; we map to username for hardcoded users
-        const res = await fetch('/api/auth/login', {
+    try {
+      const email = formData.email.trim();
+      const password = formData.password;
+      const username = formData.username.trim() || email;
+      if (!email || !password) {
+        console.error('email and password required');
+        return;
+      }
+
+      if (isLogin) {
+        // Login against server
+        const resp = await fetch('/api/users/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password: formData.password })
+          body: JSON.stringify({ email, password })
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          console.error('Login failed', err);
+        const data = await resp.json();
+        if (!resp.ok) {
+          console.error('Login failed:', data.error || data);
           return;
         }
-        const data = await res.json();
-        onLogin(data.user, data.token);
-      } catch (err) {
-        console.error('Login error', err);
+        onLogin(data.user);
+      } else {
+        // Signup then login the returned user
+        const resp = await fetch('/api/users/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password })
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          console.error('Signup failed:', data.error || data);
+          return;
+        }
+        onLogin(data.user);
       }
-    })();
+    } catch (err) {
+      console.error('Auth error', err);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,6 +71,9 @@ export function AuthPage({ onLogin }: AuthPageProps) {
         <div className="auth-header">
           <h1>CalorieTracker</h1>
           <p>Track your nutrition journey</p>
+          <p style={{ fontSize: '0.85rem', color: '#666' }}>
+            Please sign up first to create an account, then use Login. Your account is stored securely on the server.
+          </p>
         </div>
 
         <div className="auth-tabs">
@@ -71,18 +93,18 @@ export function AuthPage({ onLogin }: AuthPageProps) {
 
         <form onSubmit={handleSubmit} className="auth-form">
           {!isLogin && (
-            <div className="form-group">
-              <label htmlFor="name">Full Name</label>
-              <input
-                type="text"
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                required={!isLogin}
-              />
-            </div>
-          )}
+              <div className="form-group">
+                <label htmlFor="username">Username</label>
+                <input
+                  type="text"
+                  id="username"
+                  name="username"
+                  value={formData.username}
+                  onChange={handleChange}
+                  required={!isLogin}
+                />
+              </div>
+            )}
 
           <div className="form-group">
             <label htmlFor="email">Email</label>

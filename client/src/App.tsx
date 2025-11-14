@@ -11,7 +11,6 @@ type Page = 'dashboard' | 'community' | 'settings';
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
-  const [authToken, setAuthToken] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
 
   useEffect(() => {
@@ -22,27 +21,22 @@ export default function App() {
     const authStatus = localStorage.getItem('isAuthenticated');
     if (authStatus === 'true') {
       setIsAuthenticated(true);
-      setAuthToken(localStorage.getItem('token'));
       const u = localStorage.getItem('user');
       setCurrentUser(u ? JSON.parse(u) : null);
     }
   }, []);
 
-  const handleLogin = (user: any, token: string) => {
+  const handleLogin = (user: any) => {
     setIsAuthenticated(true);
-    setAuthToken(token);
     setCurrentUser(user);
     localStorage.setItem('isAuthenticated', 'true');
-    localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
     localStorage.removeItem('isAuthenticated');
-    localStorage.removeItem('token');
     localStorage.removeItem('user');
-    setAuthToken(null);
     setCurrentUser(null);
     setCurrentPage('dashboard');
   };
@@ -59,8 +53,8 @@ export default function App() {
         onLogout={handleLogout}
       />
       <main className="main-content">
-        {currentPage === 'dashboard' && <Dashboard />}
-        {currentPage === 'community' && <Community token={authToken} currentUser={currentUser} />}
+  {currentPage === 'dashboard' && <Dashboard currentUser={currentUser} />}
+  {currentPage === 'community' && <Community currentUser={currentUser} />}
         {currentPage === 'settings' && <Settings />}
       </main>
     </div>

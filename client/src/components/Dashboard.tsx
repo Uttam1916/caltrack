@@ -26,7 +26,7 @@ const MOCK_HISTORY = [
   { date: 'Sun', calories: 1450 }
 ];
 
-export function Dashboard() {
+export function Dashboard({ currentUser }: { currentUser: any | null }) {
   const [showAddFood, setShowAddFood] = useState(false);
   const [foodEntries, setFoodEntries] = useState<Array<any>>([]);
   const [consumed, setConsumed] = useState({ calories: 0, protein: 0, carbs: 0, fats: 0 });
@@ -46,8 +46,14 @@ export function Dashboard() {
     async function fetchToday() {
       setLoading(true);
       try {
-        const token = localStorage.getItem('token');
-        const res = await fetch('/api/entries/today', { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+        const userId = currentUser?.id ?? null;
+        if (!userId) {
+          setFoodEntries([]);
+          setConsumed({ calories: 0, protein: 0, carbs: 0, fats: 0 });
+          setLoading(false);
+          return;
+        }
+        const res = await fetch(`/api/entries/today?userId=${encodeURIComponent(userId)}`);
         if (!res.ok) throw new Error(`Failed to fetch: ${res.status}`);
         const data = await res.json();
         // map _id -> id and derive time string
@@ -58,6 +64,7 @@ export function Dashboard() {
           protein: e.protein,
           carbs: e.carbs,
           fats: e.fats,
+          userId: e.userId,
           date: e.date,
           time: new Date(e.date).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
         }));
@@ -87,11 +94,11 @@ export function Dashboard() {
   // Add a new food entry: POST to backend and update state from returned entry
   const handleAddFood = async (food: any) => {
     try {
-      const token = localStorage.getItem('token');
+      const userId = currentUser?.id ?? null;
       const res = await fetch('/api/entries', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify(food)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...food, userId })
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -124,8 +131,9 @@ export function Dashboard() {
 
   const handleDeleteEntry = async (id: string) => {
     try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`/api/entries/${id}`, { method: 'DELETE', headers: token ? { Authorization: `Bearer ${token}` } : {} });
+      const userId = currentUser?.id ?? null;
+      // send userId as safety (server currently does not enforce auth)
+      const res = await fetch(`/api/entries/${id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId }) });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Failed to delete entry: ${res.status}`);
@@ -222,9 +230,11 @@ export function Dashboard() {
                 <span className="macro-detail">C: {entry.carbs}g</span>
                 <span className="macro-detail">F: {entry.fats}g</span>
               </div>
-              <div className="food-actions">
-                <button className="delete-entry-btn" onClick={() => handleDeleteEntry(entry.id)}>Delete</button>
-              </div>
+              {currentUser && entry.userId === currentUser.id && (
+                <div className="food-actions">
+                  <button className="delete-entry-btn" onClick={() => handleDeleteEntry(entry.id)}>Delete</button>
+                </div>
+              )}
             </div>
           ))}
         </div>

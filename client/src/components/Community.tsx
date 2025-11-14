@@ -4,11 +4,10 @@ import { CreatePostModal } from './CreatePostModal';
 import '../styles/community.css';
 
 interface CommunityProps {
-  token: string | null;
   currentUser: any | null;
 }
 
-export function Community({ token, currentUser }: CommunityProps) {
+export function Community({ currentUser }: CommunityProps) {
   const [posts, setPosts] = useState<any[]>([]);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -44,10 +43,9 @@ export function Community({ token, currentUser }: CommunityProps) {
       const res = await fetch('/api/posts', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ content })
+        body: JSON.stringify({ content, authorId: currentUser?.id, authorName: currentUser?.name || currentUser?.username })
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
@@ -62,9 +60,9 @@ export function Community({ token, currentUser }: CommunityProps) {
   };
 
   const handleDeletePost = async (postId: string) => {
-    if (!token) return;
+    if (!currentUser) return;
     try {
-      const res = await fetch(`/api/posts/${postId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(`/api/posts/${postId}`, { method: 'DELETE' });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || `Failed to delete post: ${res.status}`);
